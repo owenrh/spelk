@@ -21,55 +21,78 @@ package org.apache.spark.elk.metrics.sink
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
+
 import com.codahale.metrics.MetricRegistry
-import com.ibm.spark.elk.metrics.reporter.ElasticsearchReporter
+import com.ibm.spark.elk.metrics.ElasticsearchReporter
 import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.SecurityManager
+import org.slf4j.LoggerFactory
 
-class ElasticsearchSink(val properties: Properties, val registry: MetricRegistry,
-    securityMgr: SecurityManager) extends Sink {
+class ElasticsearchSink(properties: Properties, registry: MetricRegistry, securityMgr: SecurityManager) extends Sink {
+  @transient lazy private val log = LoggerFactory.getLogger(getClass.getName)
 
-  // Property keys
-  val ELASTICSEARCH_KEY_HOST = "host"
-  val ELASTICSEARCH_KEY_PORT = "port"
-  val ELASTICSEARCH_KEY_INDEX = "index"
-  val ELASTICSEARCH_KEY_PERIOD = "period"
-  val ELASTICSEARCH_KEY_UNIT = "unit"
+  // configuration keys
+  object Keys {
+    val clusterName = "clusterName"
+    val host = "host"
+    val port = "port"
+    val indexName = "index"
+    val indexDateFormat = "indexDateFormat"
+    val pollPeriod = "period"
+    val pollPeriodUnit = "unit"
+  }
 
-  // Defaults
-  val ELASTICSEARCH_DEFAULT_PERIOD = 10
-  val ELASTICSEARCH_DEFAULT_UNIT = "SECONDS"
-  val ELASTICSEARCH_DEFAULT_INDEX = "spark"
+  // configuration defaults
+  object Defaults {
+    val defaultPeriod = 10
+    val defaultUnit = "SECONDS"
+    val defaultIndexName = "spark-metrics"
+  }
 
-  // Host and port must be specified
-  val host = properties.getProperty(ELASTICSEARCH_KEY_HOST)
+  // cluster name, host and port must be specified
+
+  def message(msg: String) = s"'$msg' not specified for Elasticsearch sink"
+
+  val clusterName = properties.getProperty(Keys.clusterName)
+  if (clusterName == null) {
+    log.error(message("clustername"))
+    throw new Exception(message("clustername"))
+  }
+
+  val host = properties.getProperty(Keys.host)
   if (host == null) {
-    throw new Exception("'host' property not specified for Elasticsearch sink.")
+    log.error(message("host"))
+    throw new Exception(message("host"))
   }
-  val port = properties.getProperty(ELASTICSEARCH_KEY_PORT)
+
+  val port = properties.getProperty(Keys.port)
   if (port == null) {
-    throw new Exception("'port' property not specified for Elasticsearch sink")
+    log.error(message("port"))
+    throw new Exception(message("port"))
   }
 
-  val index = properties.getProperty(ELASTICSEARCH_KEY_INDEX, ELASTICSEARCH_DEFAULT_INDEX)
+  val index = properties.getProperty(Keys.indexName, Defaults.defaultIndexName)
+  val indexDateFormat = properties.getProperty(Keys.indexDateFormat)
 
-  val pollPeriod = Option(properties.getProperty(ELASTICSEARCH_KEY_PERIOD)) match {
+  val pollPeriod = Option(properties.getProperty(Keys.pollPeriod)) match {
     case Some(s) => s.toInt
-    case None => ELASTICSEARCH_DEFAULT_PERIOD
+    case None => Defaults.defaultPeriod
   }
 
-  val pollUnit: TimeUnit = Option(properties.getProperty(ELASTICSEARCH_KEY_UNIT)) match {
+  val pollUnit: TimeUnit = Option(properties.getProperty(Keys.pollPeriodUnit)) match {
     case Some(s) => TimeUnit.valueOf(s.toUpperCase())
-    case None => TimeUnit.valueOf(ELASTICSEARCH_DEFAULT_UNIT)
+    case None => TimeUnit.valueOf(Defaults.defaultUnit)
   }
 
   val reporter: ElasticsearchReporter = ElasticsearchReporter.forRegistry(registry)
     .convertDurationsTo(TimeUnit.MILLISECONDS)
     .convertRatesTo(TimeUnit.SECONDS)
+    .clusterName(clusterName)
     .host(host)
     .port(port)
     .index(index)
-    .build();
+    .indexDateFormat(indexDateFormat)
+    .build()
 
   override def start() {
     reporter.start(pollPeriod, pollUnit)

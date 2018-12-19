@@ -15,31 +15,77 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<artifactId>spelk</artifactId>
+    <groupId>com.ibm</groupId>
+	<artifactId>spelk_2.10</artifactId>
 	<version>0.1.0</version>
 	<packaging>jar</packaging>
 	<name>Spelk</name>
 
 	<properties>
-		<spark.version>2.0.0</spark.version>
-		<scala.binary.version>2.11</scala.binary.version>
+        <scala.binary.version>2.10</scala.binary.version>
+        <elasticsearch.version>6.5.3</elasticsearch.version>
 	</properties>
 
 	<dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
+            <version>${jackson.version}</version>
+            <scope>compile</scope>
+        </dependency>
 		<dependency>
 			<groupId>org.apache.spark</groupId>
 			<artifactId>spark-core_${scala.binary.version}</artifactId>
 			<version>${spark.version}</version>
 			<scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.module</groupId>
+                    <artifactId>jackson-module-scala_2.10</artifactId>
+                </exclusion>
+            </exclusions>
 		</dependency>
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>transport</artifactId>
+            <version>${elasticsearch.version}</version>
+            <scope>compile</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+            </exclusions>
+            <!--<exclusions>-->
+                <!--<exclusion>-->
+                    <!--<groupId>io.netty</groupId>-->
+                    <!--<artifactId>netty-common</artifactId>-->
+                <!--</exclusion>-->
+            <!--</exclusions>-->
+        </dependency>
 		<dependency>
 			<groupId>org.scala-lang</groupId>
 			<artifactId>scala-compiler</artifactId>
 			<version>${scala.version}</version>
+            <scope>provided</scope>
 		</dependency>
 	</dependencies>
 	<build>
-		<outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+		<outputDirectory>target/spark-${spark.version}/classes</outputDirectory>
 		<plugins>
 			<plugin>
 				<groupId>net.alchim31.maven</groupId>
@@ -61,33 +107,53 @@
 					</execution>
 				</executions>
 			</plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.1</version>
+                <configuration>
+                    <!-- put your configurations here -->
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <relocations>
+                                <relocation>
+                                    <pattern>io.netty</pattern>
+                                    <shadedPattern>shaded.io.netty</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.fasterxml</pattern>
+                                    <shadedPattern>shaded.com.fasterxml</shadedPattern>
+                                </relocation>
+                            </relocations>
+                        </configuration>
+                        <!--<configuration>-->
+                            <!--<minimizeJar>true</minimizeJar>-->
+                        <!--</configuration>-->
+                    </execution>
+                </executions>
+            </plugin>
 		</plugins>
 	</build>
 	<profiles>
 		<profile>
-			<id>scala-2.10</id>
+			<id>spark1.6.3</id>
 			<activation>
+                <activeByDefault>true</activeByDefault>
 				<property>
-					<name>scala-2.10</name>
+					<name>spark1.6.3</name>
 				</property>
 			</activation>
 			<properties>
-				<scala.version>2.10.5</scala.version>
-				<scala.binary.version>2.10</scala.binary.version>
-			</properties>
-		</profile>
-		<profile>
-			<id>scala-2.11</id>
-			<activation>
-				<property>
-					<name>!scala-2.10</name>
-				</property>
-			</activation>
-			<properties>
-				<scala.version>2.11.8</scala.version>
-				<scala.binary.version>2.11</scala.binary.version>
+                <spark.version>1.6.3</spark.version>
+                <scala.version>2.10.5</scala.version>
+                <jackson.version>2.8.1</jackson.version>
 			</properties>
 		</profile>
 	</profiles>
-	<groupId>com.ibm</groupId>
 </project>

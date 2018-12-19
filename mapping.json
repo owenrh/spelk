@@ -1,0 +1,39 @@
+{
+  "template": "spark-metrics-*",
+  "settings": {
+    "index": {
+      "refresh_interval": "5s"
+    },
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "_default_": {
+      "date_detection": false,
+      "dynamic_templates": [
+        {
+          "timestamp":
+          {
+            "match": "timestamp",
+            "mapping":
+            {
+              "type": "date",
+              "format": "dateOptionalTime"
+            }
+          }
+        },
+        {
+          "string_fields":
+          {
+            "match": "*",
+            "match_mapping_type": "string",
+            "mapping":
+            {
+              "type": "keyword",
+              "omit_norms": true
+            }
+          }
+        }
+      ]
+    }
+  }
+}
