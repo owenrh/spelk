@@ -48,7 +48,7 @@ class ElasticsearchSink(properties: Properties, registry: MetricRegistry, securi
     val defaultIndexName = "spark-metrics"
   }
 
-  // cluster name, host and port must be specified
+  // host and port must be specified
 
   def message(msg: String) = s"'$msg' not specified for Elasticsearch sink"
 
