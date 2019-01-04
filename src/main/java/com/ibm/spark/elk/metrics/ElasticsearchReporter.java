@@ -87,7 +87,8 @@ public class ElasticsearchReporter extends ScheduledReporter {
         this.indexName = indexName;
         if (indexDateFormat != null) {
             this.dateFormat = new SimpleDateFormat(indexDateFormat);
-        } else {
+        }
+        else {
             this.dateFormat = null;
         }
 
@@ -100,7 +101,8 @@ public class ElasticsearchReporter extends ScheduledReporter {
                     .append(indexName)
                     .append("-")
                     .append(dateFormat.format(new Date())).toString();
-        } else {
+        }
+        else {
             return indexName;
         }
     }
@@ -159,7 +161,8 @@ public class ElasticsearchReporter extends ScheduledReporter {
             if (bulkResponse.hasFailures()) {
                 log.error(bulkResponse.buildFailureMessage()); // TODO: tidy up
             }
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             log.error("Exception posting to Elasticsearch index", e);
         }
     }
@@ -286,7 +289,8 @@ public class ElasticsearchReporter extends ScheduledReporter {
         super.close();
         try {
             elastic.close();
-        } catch (IOException e) {
+        }
+        catch (IOException e) {
             log.error("Exception closing Elastic client", e);
         }
     }
