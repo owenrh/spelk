@@ -121,10 +121,8 @@
                                     <shadedPattern>shaded.com.fasterxml</shadedPattern>
                                 </relocation>
                             </relocations>
+                            <minimizeJar>true</minimizeJar>
                         </configuration>
-                        <!--<configuration>-->
-                            <!--<minimizeJar>true</minimizeJar>-->
-                        <!--</configuration>-->
                     </execution>
                 </executions>
             </plugin>
