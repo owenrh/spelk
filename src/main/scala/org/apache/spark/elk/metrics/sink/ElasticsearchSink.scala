@@ -33,7 +33,6 @@ class ElasticsearchSink(properties: Properties, registry: MetricRegistry, securi
 
   // configuration keys
   object Keys {
-    val clusterName = "clusterName"
     val host = "host"
     val port = "port"
     val indexName = "index"
@@ -52,12 +51,6 @@ class ElasticsearchSink(properties: Properties, registry: MetricRegistry, securi
   // cluster name, host and port must be specified
 
   def message(msg: String) = s"'$msg' not specified for Elasticsearch sink"
-
-  val clusterName = properties.getProperty(Keys.clusterName)
-  if (clusterName == null) {
-    log.error(message("clustername"))
-    throw new Exception(message("clustername"))
-  }
 
   val host = properties.getProperty(Keys.host)
   if (host == null) {
@@ -87,7 +80,6 @@ class ElasticsearchSink(properties: Properties, registry: MetricRegistry, securi
   val reporter: ElasticsearchReporter = ElasticsearchReporter.forRegistry(registry)
     .convertDurationsTo(TimeUnit.MILLISECONDS)
     .convertRatesTo(TimeUnit.SECONDS)
-    .clusterName(clusterName)
     .host(host)
     .port(port)
     .index(index)

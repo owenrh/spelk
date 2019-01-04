@@ -18,9 +18,22 @@
  */
 package com.ibm.spark.elk.metrics;
 
+import com.codahale.metrics.*;
+import org.apache.http.HttpHost;
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkEnv;
+import org.apache.spark.util.Utils;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -29,31 +42,7 @@ import java.util.Map.Entry;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkEnv;
-import org.apache.spark.util.Utils;
-import org.elasticsearch.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.action.bulk.BulkResponse;
-import org.elasticsearch.client.Client;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.transport.client.PreBuiltTransportClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.codahale.metrics.Clock;
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricFilter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.ScheduledReporter;
-import com.codahale.metrics.Snapshot;
-import com.codahale.metrics.Timer;
-
-import static org.elasticsearch.common.xcontent.XContentFactory.*;
+import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 
 public class ElasticsearchReporter extends ScheduledReporter {
 
@@ -71,7 +60,7 @@ public class ElasticsearchReporter extends ScheduledReporter {
 	private String appId = null;
 	private String executorId = null;
 
-	private Client elastic;
+	private RestHighLevelClient elastic;
 
 	private final String indexName;
     private final DateFormat dateFormat;
@@ -80,7 +69,6 @@ public class ElasticsearchReporter extends ScheduledReporter {
 								  final MetricFilter filter,
 								  final TimeUnit rateUnit,
 								  final TimeUnit durationUnit,
-								  final String clusterName,
 								  final String host, // TODO: make hosts rather than host?
 								  final String port,
 								  final String indexName,
@@ -104,13 +92,7 @@ public class ElasticsearchReporter extends ScheduledReporter {
 		    this.dateFormat = null;
         }
 
-		try {
-            final Settings settings = Settings.builder().put("cluster.name", clusterName).build();
-			elastic = new PreBuiltTransportClient(settings).addTransportAddress(new TransportAddress(InetAddress.getByName(host), Integer.parseInt(port)));
-		}
-		catch (UnknownHostException e) {
-			log.error("Unable to connect to Elasticsearch host");
-		}
+        elastic = new RestHighLevelClient(RestClient.builder(new HttpHost(host, Integer.parseInt(port), "http")));
 	}
 
 	private String getIndexName() {
@@ -143,7 +125,7 @@ public class ElasticsearchReporter extends ScheduledReporter {
 		}
 
 		try {
-			final BulkRequestBuilder bulkRequest = elastic.prepareBulk();
+			final BulkRequest bulkRequest = new BulkRequest();
 
 			if (!gauges.isEmpty()) {
 				for (Map.Entry<String, Gauge> entry : gauges.entrySet()) {
@@ -175,7 +157,7 @@ public class ElasticsearchReporter extends ScheduledReporter {
 				}
 			}
 
-            final BulkResponse bulkResponse = bulkRequest.get();
+			final BulkResponse bulkResponse = elastic.bulk(bulkRequest, RequestOptions.DEFAULT);
             if (bulkResponse.hasFailures()) {
                 log.error(bulkResponse.buildFailureMessage()); // TODO: tidy up
             }
@@ -212,36 +194,36 @@ public class ElasticsearchReporter extends ScheduledReporter {
             .field("metricName", metricName);
     }
 
-	private void reportGauge(final BulkRequestBuilder bulkRequest,
+	private void reportGauge(final BulkRequest bulkRequest,
                              final Map.Entry<String, Gauge> entry,
                              final String timestampString) throws IOException {
-        bulkRequest.add(elastic.prepareIndex(getIndexName(), "_doc")
-            .setSource(buildMetricsDoc(entry.getKey(), timestampString)
+        bulkRequest.add(new IndexRequest(getIndexName(), "_doc")
+				.source(buildMetricsDoc(entry.getKey(), timestampString)
                 .field("value", entry.getValue().getValue())
                 .endObject()
             )
         );
     }
 
-	private void reportCounter(final BulkRequestBuilder bulkRequest,
+	private void reportCounter(final BulkRequest bulkRequest,
                                final Entry<String, Counter> entry,
                                final String timestampString) throws IOException {
-        bulkRequest.add(elastic.prepareIndex(getIndexName(), "_doc")
-            .setSource(buildMetricsDoc(entry.getKey(), timestampString)
+        bulkRequest.add(new IndexRequest(getIndexName(), "_doc")
+				.source(buildMetricsDoc(entry.getKey(), timestampString)
                 .field("count", entry.getValue().getCount())
                 .endObject()
             )
         );
 	}
 
-	private void reportHistogram(final BulkRequestBuilder bulkRequest,
+	private void reportHistogram(final BulkRequest bulkRequest,
                                  final Entry<String, Histogram> entry,
                                  final String timestampString) throws IOException {
         final Histogram histogram = entry.getValue();
         final Snapshot snapshot = histogram.getSnapshot();
 
-        bulkRequest.add(elastic.prepareIndex(getIndexName(), "_doc")
-                .setSource(buildMetricsDoc(entry.getKey(), timestampString)
+        bulkRequest.add(new IndexRequest(getIndexName(), "_doc")
+				.source(buildMetricsDoc(entry.getKey(), timestampString)
                         .field("min", convertDuration(snapshot.getMin()))
                         .field("max", convertDuration(snapshot.getMax()))
                         .field("mean", convertDuration(snapshot.getMean()))
@@ -257,13 +239,13 @@ public class ElasticsearchReporter extends ScheduledReporter {
         );
 	}
 
-	private void reportMeter(final BulkRequestBuilder bulkRequest,
+	private void reportMeter(final BulkRequest bulkRequest,
                              final Entry<String, Meter> entry,
                              final String timestampString) throws IOException {
         final Meter meter = entry.getValue();
 
-        bulkRequest.add(elastic.prepareIndex(getIndexName(), "_doc")
-                .setSource(buildMetricsDoc(entry.getKey(), timestampString)
+        bulkRequest.add(new IndexRequest(getIndexName(), "_doc")
+				.source(buildMetricsDoc(entry.getKey(), timestampString)
                         .field("count", meter.getCount())
                         .field("mean rate", convertRate(meter.getMeanRate()))
                         .field("1-minute rate", convertRate(meter.getOneMinuteRate()))
@@ -274,14 +256,14 @@ public class ElasticsearchReporter extends ScheduledReporter {
         );
 	}
 
-	private void reportTimer(final BulkRequestBuilder bulkRequest,
+	private void reportTimer(final BulkRequest bulkRequest,
                              final Entry<String, Timer> entry,
                              final String timestampString) throws IOException {
         final Timer timer = entry.getValue();
         final Snapshot snapshot = timer.getSnapshot();
 
-        bulkRequest.add(elastic.prepareIndex(getIndexName(), "_doc")
-                .setSource(buildMetricsDoc(entry.getKey(), timestampString)
+        bulkRequest.add(new IndexRequest(getIndexName(), "_doc")
+				.source(buildMetricsDoc(entry.getKey(), timestampString)
                         .field("count", timer.getCount())
                         .field("mean rate", convertRate(timer.getMeanRate()))
                         .field("1-minute rate", convertRate(timer.getOneMinuteRate()))
@@ -305,7 +287,12 @@ public class ElasticsearchReporter extends ScheduledReporter {
     @Override
     public void close() {
         super.close();
-        elastic.close();
+        try {
+			elastic.close();
+		}
+		catch (IOException e) {
+        	log.error("Exception closing Elastic client", e);
+		}
     }
 
     public static Builder forRegistry(MetricRegistry registry) {
@@ -318,7 +305,6 @@ public class ElasticsearchReporter extends ScheduledReporter {
 		private TimeUnit durationUnit;
 		private MetricFilter filter;
 
-		private String clusterName = "elasticsearch";
 		private String host = "localhost";
 		private String port = "9200";
 		private String indexName = "spark-metrics";
@@ -331,11 +317,6 @@ public class ElasticsearchReporter extends ScheduledReporter {
 			this.durationUnit = TimeUnit.MILLISECONDS;
 			this.filter = MetricFilter.ALL;
 		}
-
-		public Builder clusterName(final String clusterName) {
-		    this.clusterName = clusterName;
-		    return this;
-        }
 
 		public Builder host(String hostName) {
 			this.host = hostName;
@@ -373,7 +354,7 @@ public class ElasticsearchReporter extends ScheduledReporter {
 		}
 
 		public ElasticsearchReporter build() {
-			return new ElasticsearchReporter(registry, filter, rateUnit, durationUnit, clusterName, host, port, indexName, indexDateFormat, timestampField);
+			return new ElasticsearchReporter(registry, filter, rateUnit, durationUnit, host, port, indexName, indexDateFormat, timestampField);
 		}
 	}
 }
